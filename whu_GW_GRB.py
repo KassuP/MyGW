@@ -31,6 +31,9 @@ from multiprocessing import Pool
 # 进程展示
 from tqdm import tqdm
 
+import sys
+import argparse
+
 # from pathos.multiprocessing import ProcessingPool as Pool
 
 # 定义全局常量
@@ -254,52 +257,74 @@ def Rz_MD(z):
 
 # 根据红移分布函数，计算红移小区间内“模拟观测到”的引力波事件数量。
 # 输入：红移分布函数（Rz0(z)或Rz(z)或Rz_MD(z)）, 区间步长，区间数量 -> 输出：一维numpy整数数组（每个红移小区间内“模拟观测到”的引力波事件数量）
-def generate_zn_samples(z_distribution_func,step=0.01,n_range=20):
-    znlist0=[quad(z_distribution_func,step*i,step*(i+1))[0] for i in range(n_range)] # 积分计算每个红移区间的“理论期望数” 带小数
-    znlist1=[int(znlist0[i]) for i in range(len(znlist0))] # 对理论值进行向下取整
-    znlist1=np.array(znlist1)
-    znlist2=np.zeros(len(znlist0)) # 决定那些“小数点后的数字”是否能变成一个真实的信号：这是一种伯松抽样（Poisson Sampling）的简化实现
+# def generate_zn_samples(z_distribution_func,step=0.01,n_range=20):
+#     znlist0=[quad(z_distribution_func,step*i,step*(i+1))[0] for i in range(n_range)] # 积分计算每个红移区间的“理论期望数” 带小数
+#     znlist1=[int(znlist0[i]) for i in range(len(znlist0))] # 对理论值进行向下取整
+#     znlist1=np.array(znlist1)
+#     znlist2=np.zeros(len(znlist0)) # 决定那些“小数点后的数字”是否能变成一个真实的信号：这是一种伯松抽样（Poisson Sampling）的简化实现
+#     for i in range(len(znlist2)):
+#         a=np.random.random()
+#         if znlist0[i]-znlist1[i]>a:
+#             znlist2[i]=znlist1[i]+1 # 向上取整
+#         else:
+#             znlist2[i]=znlist1[i] # 保持向下取整
+#     znlist=np.array([int(znlist2[i]) for i in range(len(znlist2))]) # 将结果汇总并转回整数类型。
+#     return znlist
+def generate_zn_samples(z_distribution_func, step=0.01, n_range=20, z_start=0.0):
+    """
+    计算从 z_start 开始，分 n_range 个步长区间，每个区间的源数量
+    """
+    # 修改点：quad 的积分下限变为 z_start + step*i，上限变为 z_start + step*(i+1)
+    znlist0 = [quad(z_distribution_func, z_start + step*i, z_start + step*(i+1))[0] for i in range(n_range)]
+    
+    znlist1 = np.array([int(x) for x in znlist0])
+    znlist2 = np.zeros(len(znlist0))
+    
     for i in range(len(znlist2)):
-        a=np.random.random()
-        if znlist0[i]-znlist1[i]>a:
-            znlist2[i]=znlist1[i]+1 # 向上取整
+        a = np.random.random()
+        # 概率抽样：处理小数点部分
+        if znlist0[i] - znlist1[i] > a:
+            znlist2[i] = znlist1[i] + 1
         else:
-            znlist2[i]=znlist1[i] # 保持向下取整
-    znlist=np.array([int(znlist2[i]) for i in range(len(znlist2))]) # 将结果汇总并转回整数类型。
-    return znlist
-
+            znlist2[i] = znlist1[i]
+            
+    return znlist2.astype(int)
 # znlist = generate_zn_samples(Rz_MD,step=0.01,n_range=20)
 # print(znlist)
 
 # 将之前generate_zn_samples算出的“每个区间有几个源”的数量，转化为每个源具体的红移坐标。
 # 输入：红移分布函数, 区间步长，区间数量 -> 输出：一维numpy数组（每个元素是一个引力波事件的红移）
-def generate_z_samples(z_distribution_func,step=0.01,n_range=20):
-    znlist=generate_zn_samples(z_distribution_func,step,n_range)
-    zlist=np.array([])
+# def generate_z_samples(z_distribution_func,step=0.01,n_range=20):
+#     znlist=generate_zn_samples(z_distribution_func,step,n_range)
+#     zlist=np.array([])
+#     for i, n in enumerate(znlist):
+#         z=np.random.uniform(step*i,step*(i+1),n)
+#         zlist=np.concatenate((zlist,z),axis=None)
+#     zlist.sort()
+#     print(zlist,np.sum(znlist),len(zlist))
+#     return zlist
+def generate_z_samples(z_distribution_func, step=0.01, n_range=20, z_start=0.0):
+    """
+    将区间数量转化为具体的红移坐标，支持起始点 z_start
+    """
+    znlist = generate_zn_samples(z_distribution_func, step, n_range, z_start)
+    zlist = np.array([])
+    
     for i, n in enumerate(znlist):
-        z=np.random.uniform(step*i,step*(i+1),n)
-        zlist=np.concatenate((zlist,z),axis=None)
+        # 修改点：均匀分布采样范围同样需要加上 z_start 偏移
+        low = z_start + step * i
+        high = z_start + step * (i + 1)
+        z = np.random.uniform(low, high, n)
+        zlist = np.concatenate((zlist, z), axis=None)
+        
     zlist.sort()
-    print(zlist,np.sum(znlist),len(zlist))
+    print(f"Z range: [{zlist.min() if len(zlist)>0 else z_start:.3f} - {zlist.max() if len(zlist)>0 else z_start:.3f}]")
+    print(f"Total events: {len(zlist)}")
     return zlist
 
 # zlist = generate_z_samples(Rz_MD,step=0.01,n_range=5)
 # print(zlist)
 
-# 将之前generate_zn_samples算出的“每个区间有几个源”的数量，转化为每个源具体的红移坐标。
-# 输入：红移分布函数, 区间步长，区间数量 -> 输出：一维numpy数组（每个元素是一个引力波事件的红移）
-def generate_z_samples(z_distribution_func,step=0.01,n_range=20):
-    znlist=generate_zn_samples(z_distribution_func,step,n_range)
-    zlist=np.array([])
-    for i, n in enumerate(znlist):
-        z=np.random.uniform(step*i,step*(i+1),n)
-        zlist=np.concatenate((zlist,z),axis=None)
-    zlist.sort()
-    # print(zlist,np.sum(znlist),len(zlist))
-    return zlist
-
-# zlist = generate_z_samples(Rz_MD,step=0.01,n_range=5)
-# print(zlist)
 
 # 根据生成的红移样本坐标zlist，去组成更完整的模拟引力波事件数据
 # 输入：使用引力模型类型，生成的红移坐标 ->输出：二维numpy数组，每行是一个模拟引力波事件的参数（Mc, eta, dL, iota, theta, phi, psi, tc, phic）
@@ -600,37 +625,94 @@ def rho2_ETCE_l2(Mc,eta,dL,iota,theta,phi,psi,tc,phic,e0,beta,detector="ET",type
     return np.sum(rho2i)
 
 # 输入：物理量参数列表 -> 输出: SNR筛选后的GW事件信息(z,snr,Mc,eta,dL,iota,theta,phi,psi,tc,phic)
-def GW_SNR(gw_events,detector="ET",model_type="IMRPhenomXHM"):
-    print(f"Calculating SNR for {len(gw_events)} GW events in {detector} with model {model_type}...")
-    snr=[]
-    z=gw_events[:,0]
-    Mc=gw_events[:,1]
-    eta=gw_events[:,2]
-    dL=gw_events[:,3]
-    iota=gw_events[:,4]
-    theta=gw_events[:,5]
-    phi=gw_events[:,6]
-    psi=gw_events[:,7]
-    tc = gw_events[:,8]
-    phic = gw_events[:,9]
+# def GW_SNR(gw_events,detector="ET",model_type="IMRPhenomXHM"):
+#     print(f"Calculating SNR for {len(gw_events)} GW events in {detector} with model {model_type}...")
+#     snr=[]
+#     z=gw_events[:,0]
+#     Mc=gw_events[:,1]
+#     eta=gw_events[:,2]
+#     dL=gw_events[:,3]
+#     iota=gw_events[:,4]
+#     theta=gw_events[:,5]
+#     phi=gw_events[:,6]
+#     psi=gw_events[:,7]
+#     tc = gw_events[:,8]
+#     phic = gw_events[:,9]
+#     if detector == "ET":
+#         for i in range(len(z)):
+#             # Mc,eta,dL,iota,theta,phi,psi,tc,phic,e0,beta,detector="ET",type=None
+#             rho2_ET1=rho2_ETCE_l2(Mc[i],eta[i],dL[i],iota[i],theta[i],phi[i],psi[i],tc[i],phic[i],e0=0,beta=0,detector=detector,type="1",model_type=model_type)
+#             rho2_ET2=rho2_ETCE_l2(Mc[i],eta[i],dL[i],iota[i],theta[i],phi[i],psi[i],tc[i],phic[i],e0=0,beta=0,detector=detector,type="2",model_type=model_type)
+#             rho2_ET3=rho2_ETCE_l2(Mc[i],eta[i],dL[i],iota[i],theta[i],phi[i],psi[i],tc[i],phic[i],e0=0,beta=0,detector=detector,type="3",model_type=model_type)
+#             rho=np.sqrt(rho2_ET1+rho2_ET2+rho2_ET3)
+#             bar(i, len(z))
+#             snr.append(rho)
+#     elif detector == "CE":
+#         for i in range(len(z)):
+#             rho2_CE1=rho2_ETCE_l2(Mc[i],eta[i],dL[i],iota[i],theta[i],phi[i],psi[i],tc[i],phic[i],e0=0,beta=0,detector=detector,type="1",model_type=model_type)
+#             rho2_CE2=rho2_ETCE_l2(Mc[i],eta[i],dL[i],iota[i],theta[i],phi[i],psi[i],tc[i],phic[i],e0=0,beta=0,detector=detector,type="2",model_type=model_type)
+#             rho=np.sqrt(rho2_CE1+rho2_CE2)
+#             bar(i, len(z))
+#             snr.append(rho)
+#     GWlist=np.column_stack((z,snr,Mc,eta,dL,iota,theta,phi,psi,tc,phic))
+#     GWlist_12=GWlist[GWlist[:,1]>12] #生成包含信噪比的GW事件列表，并且筛选信噪比大于一定值的事件
+#     return GWlist_12
+
+def SNR_worker(i, event_data, detector, model_type):
+    """
+    负责处理第 i 条数据的计算工人
+    """
+    # 解包数据 (对应你原来的索引)
+    Mc, eta, dL, iota, theta, phi, psi, tc, phic = event_data
+    
     if detector == "ET":
-        for i in range(len(z)):
-            # Mc,eta,dL,iota,theta,phi,psi,tc,phic,e0,beta,detector="ET",type=None
-            rho2_ET1=rho2_ETCE_l2(Mc[i],eta[i],dL[i],iota[i],theta[i],phi[i],psi[i],tc[i],phic[i],e0=0,beta=0,detector=detector,type="1",model_type=model_type)
-            rho2_ET2=rho2_ETCE_l2(Mc[i],eta[i],dL[i],iota[i],theta[i],phi[i],psi[i],tc[i],phic[i],e0=0,beta=0,detector=detector,type="2",model_type=model_type)
-            rho2_ET3=rho2_ETCE_l2(Mc[i],eta[i],dL[i],iota[i],theta[i],phi[i],psi[i],tc[i],phic[i],e0=0,beta=0,detector=detector,type="3",model_type=model_type)
-            rho=np.sqrt(rho2_ET1+rho2_ET2+rho2_ET3)
-            bar(i, len(z))
-            snr.append(rho)
+        r1 = rho2_ETCE_l2(Mc, eta, dL, iota, theta, phi, psi, tc, phic, 0, 0, detector, "1", model_type)
+        r2 = rho2_ETCE_l2(Mc, eta, dL, iota, theta, phi, psi, tc, phic, 0, 0, detector, "2", model_type)
+        r3 = rho2_ETCE_l2(Mc, eta, dL, iota, theta, phi, psi, tc, phic, 0, 0, detector, "3", model_type)
+        rho = np.sqrt(r1 + r2 + r3)
     elif detector == "CE":
-        for i in range(len(z)):
-            rho2_CE1=rho2_ETCE_l2(Mc[i],eta[i],dL[i],iota[i],theta[i],phi[i],psi[i],tc[i],phic[i],e0=0,beta=0,detector=detector,type="1",model_type=model_type)
-            rho2_CE2=rho2_ETCE_l2(Mc[i],eta[i],dL[i],iota[i],theta[i],phi[i],psi[i],tc[i],phic[i],e0=0,beta=0,detector=detector,type="2",model_type=model_type)
-            rho=np.sqrt(rho2_CE1+rho2_CE2)
-            bar(i, len(z))
-            snr.append(rho)
-    GWlist=np.column_stack((z,snr,Mc,eta,dL,iota,theta,phi,psi,tc,phic))
-    GWlist_12=GWlist[GWlist[:,1]>12] #生成包含信噪比的GW事件列表，并且筛选信噪比大于一定值的事件
+        r1 = rho2_ETCE_l2(Mc, eta, dL, iota, theta, phi, psi, tc, phic, 0, 0, detector, "1", model_type)
+        r2 = rho2_ETCE_l2(Mc, eta, dL, iota, theta, phi, psi, tc, phic, 0, 0, detector, "2", model_type)
+        rho = np.sqrt(r1 + r2)
+    else:
+        rho = 0
+        
+    return i, rho  # 返回索引是为了防止并行计算导致顺序错乱
+
+def GW_SNR_parallel(gw_events, detector="ET", model_type="IMRPhenomXHM", n_processes=8):
+    print(f"Parallel calculating SNR for {len(gw_events)} events with {n_processes} cores...")
+    
+    # 1. 准备容器
+    num_events = len(gw_events)
+    snr_results = [0 for _ in range(num_events)]
+    
+    # 2. 启动进程池
+    pool = Pool(processes=n_processes)
+    
+    # 3. 提交任务
+    # 注意：我们只传递该任务需要的列数据 (Mc 到 phic 是索引 1 到 9)
+    recs = []
+    for i in range(num_events):
+        event_slice = gw_events[i, 1:10] # 提取计算所需的参数
+        res = pool.apply_async(SNR_worker, (i, event_slice, detector, model_type))
+        recs.append(res)
+    
+    # 4. 收集结果并显示进度条
+    for r in tqdm(recs, desc="Computing SNR"):
+        idx, rho = r.get()
+        snr_results[idx] = rho
+        
+    # 5. 善后
+    pool.close()
+    pool.join()
+    
+    # 6. 后处理（和你原来的逻辑一致）
+    # 拼接 z, snr, 和其他的参数
+    # gw_events[:, 0] 是 z, gw_events[:, 1:] 是后面的参数
+    GWlist = np.column_stack((gw_events[:, 0], snr_results, gw_events[:, 1:]))
+    
+    # 筛选 SNR > 12
+    GWlist_12 = GWlist[GWlist[:, 1] > 12]
     return GWlist_12
 
 # GW=generate_gw_events(generate_z_samples(Rz_MD,step=0.01,n_range=5))
@@ -716,23 +798,81 @@ def prob(L_min):
     return p
 
 # 采样与条件筛选
-def sample_GRB(i,gw_events,detector="Fermi-GBM"):
-    zlist_t12=gw_events[:,0]
-    iota_t12=gw_events[:,5]
-    L_min0=pflux_min*4*np.pi*(cosmo.luminosity_distance(zlist_t12[i]).to(u.cm).value)**2*k_GRB(z=zlist_t12[i],detector=detector)*C_det_GRB(detector=detector)/(1+zlist_t12[i])
-    L_min1=L_min0/np.exp(-0.5*(iota_t12[i]*u.rad.to(u.deg))**2/4.7**2)
-    L_min=((L_min1*(u.keV/u.s)).to(u.erg/u.s)).value
-    p=prob(L_min)
+# def sample_GRB(i,gw_events,detector="Fermi-GBM"):
+#     zlist_t12=gw_events[:,0]
+#     iota_t12=gw_events[:,5]
+#     L_min0=pflux_min*4*np.pi*(cosmo.luminosity_distance(zlist_t12[i]).to(u.cm).value)**2*k_GRB(z=zlist_t12[i],detector=detector)*C_det_GRB(detector=detector)/(1+zlist_t12[i])
+#     L_min1=L_min0/np.exp(-0.5*(iota_t12[i]*u.rad.to(u.deg))**2/4.7**2)
+#     L_min=((L_min1*(u.keV/u.s)).to(u.erg/u.s)).value
+#     p=prob(L_min)
+#     a=np.random.random()
+#     aa=np.random.random()
+#     # if p>a and aa<4/30:
+#     if p>a:
+#         y=1
+#     else:
+#         y=0
+#     GRBlisti=np.append(gw_events[i],[p,y])
+#     # print(f"Event {i}: iota_deg={iota_t12[i]*u.rad.to(u.deg):.2f}, L_min={L_min:.2e}, p={p:.4f},a={a:.2e},aa={aa:.2e},y={y:.2e}")
+#     return i, GRBlisti
+# # 多核
+# def worker(i,gw_list):
+#     return sample_GRB(i, gw_list, detector="Fermi-GBM")
+
+# ==========================================
+# 1. Worker 函数 (必须放在全局)
+# ==========================================
+def GRB_worker(i, single_event, detector):
+    # 这里的变量（cosmo, pflux_min 等）需要确保在全局已导入或定义
+    z_val = single_event[0]
+    iota_val = single_event[5] 
+    
+    # --- 计算逻辑 ---
+    dist_cm = cosmo.luminosity_distance(z_val).to(u.cm).value
+    L_min0 = pflux_min * 4 * np.pi * (dist_cm**2) * \
+             k_GRB(z=z_val, detector=detector) * \
+             C_det_GRB(detector=detector) / (1 + z_val)
+    
+    iota_deg = iota_val * (180.0 / np.pi) 
+    L_min1 = L_min0 / np.exp(-0.5 * (iota_deg)**2 / 4.7**2)
+    L_min = ((L_min1 * (u.keV / u.s)).to(u.erg / u.s)).value
+    
+    p = prob(L_min)
+
     a=np.random.random()
     aa=np.random.random()
-    # if p>a and aa<4/30:
-    if p>a:
+    # y = 1 if p > np.random.random() else 0
+    if p>a and aa<4/30:
+    # if p>a:
         y=1
     else:
         y=0
-    GRBlisti=np.append(gw_events[i],[p,y])
-    # print(f"Event {i}: iota_deg={iota_t12[i]*u.rad.to(u.deg):.2f}, L_min={L_min:.2e}, p={p:.4f},a={a:.2e},aa={aa:.2e},y={y:.2e}")
-    return i, GRBlisti
+    
+    # 返回索引 i 用于排序，返回结果用于组合
+    return i, np.append(single_event, [p, y])
+
+# ==========================================
+# 2. 封装函数 (你想要的简洁调用接口)
+# ==========================================
+def GW_GRB_parallel(gw_events, detector="Fermi-GBM", n_processes=8):
+    print(f"Parallel processing {len(gw_events)} GRB samples on {n_processes} cores...")
+    
+    num_events = len(gw_events)
+    results = [None] * num_events
+    
+    with Pool(processes=n_processes) as pool:
+        # 异步提交任务
+        recs = [pool.apply_async(GRB_worker, (i, gw_events[i], detector)) 
+                for i in range(num_events)]
+        
+        # 收集结果
+        for r in tqdm(recs, desc="GRB Sampling"):
+            idx, data = r.get()
+            results[idx] = data
+            
+    return np.array(results)
+
+
 
 #fisher matrix微分，注意不同质量范围的源步长选取可能不同
 def ph0(Mc,eta,dL,iota,theta,phi,psi,tc,phic,e0,kappa,lam):
@@ -938,18 +1078,66 @@ def FM_ETCE_l2(Mc,eta,dL,iota,theta,phi,psi,tc,phic,e0,beta,detector="ET",model_
 fm_p_e0=np.diag([0,0.25**-2,0,1**-2,np.pi**-2,np.pi**-2,np.pi**-2,0,np.pi**-2]) # 这里面一共有9个值（所以对应9X9的对角矩阵）
 
 # 输入 SNR筛选后的GW事件信息(z,snr,Mc,eta,dL,iota,theta,phi,psi,tc,phic)-> 输出："z,dl,ddl"
-def Delta_dl(GW_With_SNR,detector="ET",model_type="EccentricFD"):
-    ddl = []
-    for i in range(len(GW_With_SNR)):
-        fmatrix = FM_ETCE_l2(GW_With_SNR[i,2],GW_With_SNR[i,3],GW_With_SNR[i,4],GW_With_SNR[i,5],GW_With_SNR[i,6],GW_With_SNR[i,7],GW_With_SNR[i,8],GW_With_SNR[i,9],GW_With_SNR[i,10],e0=0,beta=0,detector=detector,model_type=model_type) + fm_p_e0
+# def Delta_dl(GW_With_SNR,detector="ET",model_type="EccentricFD"):
+#     ddl = []
+#     for i in range(len(GW_With_SNR)):
+#         fmatrix = FM_ETCE_l2(GW_With_SNR[i,2],GW_With_SNR[i,3],GW_With_SNR[i,4],GW_With_SNR[i,5],GW_With_SNR[i,6],GW_With_SNR[i,7],GW_With_SNR[i,8],GW_With_SNR[i,9],GW_With_SNR[i,10],e0=0,beta=0,detector=detector,model_type=model_type) + fm_p_e0
+#         covi = np.linalg.inv(fmatrix)
+#         ddl.append(np.sqrt(covi[2,2]))
+#         bar(i,len(GW_With_SNR))
+#     result_data = np.column_stack((GW_With_SNR[:,0],GW_With_SNR[:,4],ddl))
+#     header = "z,dl,ddl"
+#     np.savetxt('GW_GRB_results.csv', result_data, delimiter=',', header=header, comments='', fmt='%.6f')
+#     return result_data
+def Delta_dl_worker(i, event_data, detector, model_type, fm_p_e0):
+    """
+    单个事件的 Fisher 矩阵计算工人
+    event_data 对应 GW_With_SNR[i]
+    """
+    # 提取参数 (根据你之前的索引: Mc 是 2, eta 是 3, dL 是 4...)
+    # 索引：2:Mc, 3:eta, 4:dL, 5:iota, 6:theta, 7:phi, 8:psi, 9:tc, 10:phic
+    args = event_data[2:11] 
+    
+    # 计算 Fisher 矩阵
+    # *args 会自动解包这 9 个参数传给 FM_ETCE_l2
+    fmatrix = FM_ETCE_l2(*args, e0=0, beta=0, detector=detector, model_type=model_type) + fm_p_e0
+    
+    try:
+        # 计算协方差矩阵（逆矩阵）
         covi = np.linalg.inv(fmatrix)
-        ddl.append(np.sqrt(covi[2,2]))
-        bar(i,len(GW_With_SNR))
-    result_data = np.column_stack((GW_With_SNR[:,0],GW_With_SNR[:,4],ddl))
+        # 提取 dL 的不确定度 (对应矩阵中的索引 2,2)
+        ddl_val = np.sqrt(covi[2,2])
+    except np.linalg.LinAlgError:
+        # 如果矩阵奇异无法求逆，填入 NaN 或无穷大
+        ddl_val = np.nan
+        
+    return i, ddl_val
+def Delta_dl_parallel(GW_With_SNR, detector="ET", model_type="EccentricFD", n_processes=8):
+    """
+    多线程 Fisher 矩阵分析函数
+    """
+    print(f"Parallel Fisher Analysis for {len(GW_With_SNR)} events on {n_processes} cores...")
+    
+    num_events = len(GW_With_SNR)
+    ddl_results = [0 for _ in range(num_events)]
+    
+    # 预先获取全局变量 fm_p_e0 (假设它已在全局定义)
+    with Pool(processes=n_processes) as pool:
+        recs = [pool.apply_async(Delta_dl_worker, (i, GW_With_SNR[i], detector, model_type, fm_p_e0)) 
+                for i in range(num_events)]
+        
+        for r in tqdm(recs, desc="Fisher Analysis"):
+            idx, val = r.get()
+            ddl_results[idx] = val
+
+    # 结果拼接: z (索引0), dL (索引4), ddl
+    result_data = np.column_stack((GW_With_SNR[:, 0], GW_With_SNR[:, 4], ddl_results))
+    
+    # 保存数据
     header = "z,dl,ddl"
     np.savetxt('GW_GRB_results.csv', result_data, delimiter=',', header=header, comments='', fmt='%.6f')
+    
     return result_data
-
 
 
 ######################################################################################################################################
@@ -972,40 +1160,19 @@ def Delta_dl(GW_With_SNR,detector="ET",model_type="EccentricFD"):
 #     data = res[1]
 #     GW_grb_list0[idx] = data
 
-# 多核
-def worker(i,gw_list):
-    return sample_GRB(i, gw_list, detector="Fermi-GBM")
 
-def main():
+
+def main(z_start, n_range, step=0.01):
     # 生成模拟GW事件
     # 10000个事件（0.01，30）需要 20min
-    GW=generate_gw_events(generate_z_samples(Rz_MD,step=0.01,n_range=10))
+    GW=generate_gw_events(generate_z_samples(Rz_MD,step=step,n_range=n_range,z_start=z_start))
 
     # 判断GW事件是否能被指定探测器探测到，并计算其信噪比（GW探测器筛选）
-    GWlist_ET=GW_SNR(GW,detector="ET",model_type="IMRPhenomXHM")
+    GWlist_ET=GW_SNR_parallel(GW,detector="ET",model_type="IMRPhenomXHM",n_processes=16)
     # print(len(GW),len(GWlist_ET))
 
-    ####################################################################
-    #################   多线程计算 #######################################
-    ####################################################################
-
     # 创建一个空列表，用于存储每个GW事件是否具有电磁对应体（GRB探测器筛选）的结果。初始值为0，表示默认没有对应体。
-    GW_grb_list0=[0 for i in range(len(GWlist_ET))]
-    pool = Pool(processes=8)
-
-    recs = [pool.apply_async(worker, (i, GWlist_ET, )) for i in range(len(GWlist_ET))]
-
-    for r in tqdm(recs, desc="Processing GRB samples"):
-        idx, data = r.get()
-        GW_grb_list0[idx] = data
-
-    pool.close()
-    pool.join()
-
-    GW_grb_list0 = np.array(GW_grb_list0)
-
-    ####################################################################
-    ####################################################################
+    GW_grb_list0=GW_GRB_parallel(GWlist_ET, detector="Fermi-GBM", n_processes=16)
 
     # 3. 转换为 numpy 数组
     GW_grb_list0 = np.array(GW_grb_list0)
@@ -1016,8 +1183,26 @@ def main():
     print(f"The GW events pass SNR test: {len(GWlist_ET)}")
     # print(f"GW events with GRB counterparts: {len(GW_GRB_list)}")
 
+    output_name = f'z_{z_start}_to_{n_range*step+z_start}.csv'
+    # 结果拼接: z (索引0), dL (索引4), ddl
+    result_data = np.column_stack((GW_GRB_list[:, 0], GW_GRB_list[:, 4]))
+    # 保存数据
+    header = "z,dl"
+    np.savetxt(output_name, result_data, delimiter=',', header=header, comments='', fmt='%.6f')
+
     # 计算每个合格的GW事件的光度距离测量不确定度Delta_dL（Fisher矩阵分析） 得到最终所需要的结果
-    Delta_dl(GW_GRB_list,detector="ET",model_type="IMRPhenomXHM")
+    # Delta_dl_parallel(GW_GRB_list,detector="ET",model_type="IMRPhenomXHM",n_processes=8)
 
 if __name__ == "__main__":
-    result = main()
+    # --- 使用 argparse 解析命令行输入 ---
+    parser = argparse.ArgumentParser(description="GW-GRB Redshift Interval Simulator")
+    
+    # 添加参数：起始红移，区间数量
+    parser.add_argument('--z_start', type=float, default=0.0, help='Starting redshift')
+    parser.add_argument('--n_range', type=int, default=100, help='Number of bins (each bin size is step)')
+    parser.add_argument('--step', type=float, default=0.01, help='Step size for each bin')
+
+    args = parser.parse_args()
+
+    # 将解析到的参数传入 main
+    main(z_start=args.z_start, n_range=args.n_range, step=args.step)
