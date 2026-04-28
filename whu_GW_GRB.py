@@ -523,7 +523,7 @@ def delay0(f,Mc,tc,theta,phi,detector="ET",type=None):
     else :
         raise ValueError(f"Unknown detector type: {detector}")
 
-fstep=0.01
+fstep=0.1
 nstart=500
 # fmax=65
 
@@ -1134,8 +1134,8 @@ def Delta_dl_parallel(GW_With_SNR, detector="ET", model_type="EccentricFD", n_pr
     result_data = np.column_stack((GW_With_SNR[:, 0], GW_With_SNR[:, 4], ddl_results))
     
     # 保存数据
-    header = "z,dl,ddl"
-    np.savetxt('GW_GRB_results.csv', result_data, delimiter=',', header=header, comments='', fmt='%.6f')
+    # header = "z,dl,ddl"
+    # np.savetxt('GW_GRB_results.csv', result_data, delimiter=',', header=header, comments='', fmt='%.6f')
     
     return result_data
 
@@ -1181,14 +1181,18 @@ def main(z_start, n_range, step=0.01):
 
     print(f"{len(GW)} GW events generated")
     print(f"The GW events pass SNR test: {len(GWlist_ET)}")
+    print(f"GW events with GRB counterparts: {len(GW_GRB_list)}")
     # print(f"GW events with GRB counterparts: {len(GW_GRB_list)}")
 
-    output_name = f'z_{z_start}_to_{n_range*step+z_start}.csv'
+    
     # 结果拼接: z (索引0), dL (索引4), ddl
-    result_data = np.column_stack((GW_GRB_list[:, 0], GW_GRB_list[:, 4]))
+    # result_data = np.column_stack((GW_GRB_list[:, 0], GW_GRB_list[:, 4]))
+    # result_data = Delta_dl_parallel(GW_GRB_list,detector="ET",model_type="IMRPhenomXHM",n_processes=6)
+
     # 保存数据
-    header = "z,dl"
-    np.savetxt(output_name, result_data, delimiter=',', header=header, comments='', fmt='%.6f')
+    header = "z,dl,ddl"
+    output_name = f'z_{z_start}_to_{n_range*step+z_start}.csv'
+    # np.savetxt(output_name, result_data, delimiter=',', header=header, comments='', fmt='%.6f')
 
     # 计算每个合格的GW事件的光度距离测量不确定度Delta_dL（Fisher矩阵分析） 得到最终所需要的结果
     # Delta_dl_parallel(GW_GRB_list,detector="ET",model_type="IMRPhenomXHM",n_processes=8)
